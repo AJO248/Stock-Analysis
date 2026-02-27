@@ -1,0 +1,40 @@
+# Core dependencies for AI-powered stock analysis platform
+
+# Stock data APIs
+yfinance>=0.2.36
+
+# Web scraping
+beautifulsoup4>=4.12.3
+requests>=2.31.0
+lxml>=5.1.0
+
+# AI and LLM
+openai>=1.12.0
+langchain>=0.1.9
+langchain-classic>=1.0.0
+langchain-openai>=0.0.5
+langchain-community>=0.0.20
+langchain-text-splitters>=0.0.1
+langchain-core>=0.1.23
+langchain-experimental>=0.0.1
+
+# Vector store and embeddings
+faiss-cpu>=1.7.4
+tiktoken>=0.6.0
+
+# Data processing
+pandas>=2.2.0
+numpy>=1.26.4
+
+# Web interface
+streamlit>=1.31.0
+
+# Environment and utilities
+python-dotenv>=1.0.1
+
+# Database
+# sqlite3 is built-in with Python (no installation needed)
+
+# Optional: Testing
+pytest>=8.0.0
+pytest-cov>=4.1.0
