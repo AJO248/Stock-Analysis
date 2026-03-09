@@ -26,6 +26,10 @@ OPENAI_EMBEDDING_MODEL = os.getenv("OPENAI_EMBEDDING_MODEL", "text-embedding-3-s
 OPENAI_MAX_RETRIES = int(os.getenv("OPENAI_MAX_RETRIES", "3"))
 OPENAI_TIMEOUT = int(os.getenv("OPENAI_TIMEOUT", "60"))
 
+# Finnhub API Configuration
+FINNHUB_API_KEY = os.getenv("FINNHUB_API_KEY", "")
+FINNHUB_ENABLED = bool(FINNHUB_API_KEY)  # Auto-enable if key is set
+
 # LLM Parameters
 LLM_TEMPERATURE = 0.3  # Lower temperature for more focused financial analysis
 LLM_MAX_TOKENS = 500  # Limit response length to manage costs
@@ -39,14 +43,18 @@ PORTFOLIO_FILE = DATA_DIR / "portfolio.json"
 # News Scraping Configuration
 NEWS_SOURCES = {
     "yahoo_finance": {
-        "enabled": True,
+        "enabled": False,  # Disabled due to blocking issues
         "base_url": "https://finance.yahoo.com/quote/{ticker}/news",
         "rate_limit": 1.5,  # seconds between requests
     },
     "google_news": {
-        "enabled": True,
+        "enabled": False,  # Disabled due to RSS issues
         "base_url": "https://news.google.com/rss/search?q={ticker}+stock",
         "rate_limit": 1.0,
+    },
+    "finnhub": {
+        "enabled": True,  # Recommended - reliable API
+        "rate_limit": 1.0,  # Free tier: 60 calls/minute
     },
 }
 

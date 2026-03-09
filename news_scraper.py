@@ -311,6 +311,123 @@ class GoogleNewsScraper(BaseScraper):
             return None
 
 
+class FinnhubScraper(BaseScraper):
+    """Scraper for Finnhub API - Reliable stock news source."""
+    
+    def __init__(self, db_manager: DatabaseManager = None):
+        super().__init__(db_manager)
+        self.source_name = "Finnhub"
+        self.rate_limit = config.NEWS_SOURCES['finnhub']['rate_limit']
+        self.api_key = config.FINNHUB_API_KEY
+        
+        if not self.api_key:
+            logger.warning("Finnhub API key not configured")
+    
+    def scrape(self, ticker: str) -> List[Dict[str, Any]]:
+        """
+        Fetch company news from Finnhub API.
+        
+        Args:
+            ticker: Stock ticker symbol
+        
+        Returns:
+            List of article dictionaries
+        """
+        if not self.api_key:
+            logger.warning("Finnhub API key not set, skipping scrape")
+            return []
+        
+        ticker = ticker.upper()
+        logger.info(f"Fetching news from Finnhub for {ticker}")
+        
+        try:
+            import finnhub
+            
+            # Initialize Finnhub client
+            finnhub_client = finnhub.Client(api_key=self.api_key)
+            
+            # Get company news from last 7 days
+            from datetime import datetime, timedelta
+            to_date = datetime.now()
+            from_date = to_date - timedelta(days=config.ARTICLE_MAX_AGE_DAYS)
+            
+            # Fetch news
+            news_items = finnhub_client.company_news(
+                ticker,
+                _from=from_date.strftime('%Y-%m-%d'),
+                to=to_date.strftime('%Y-%m-%d')
+            )
+            
+            articles = []
+            
+            # Process news items
+            for item in news_items[:config.MAX_ARTICLES_PER_STOCK]:
+                try:
+                    article = self._parse_finnhub_article(item, ticker)
+                    if article and validate_url(article['url']):
+                        # Check if article already exists
+                        existing = self.db_manager.get_article_by_url(article['url'])
+                        if not existing:
+                            article_id = self.db_manager.save_article(article)
+                            article['id'] = article_id
+                            articles.append(article)
+                        else:
+                            logger.debug(f"Article already in DB: {article['url']}")
+                
+                except Exception as e:
+                    logger.warning(f"Failed to parse Finnhub article: {e}")
+                    continue
+            
+            logger.info(f"Scraped {len(articles)} new articles for {ticker} from Finnhub")
+            time.sleep(self.rate_limit)  # Respect rate limiting
+            
+            return articles
+        
+        except ImportError:
+            logger.error("finnhub-python package not installed. Run: pip install finnhub-python")
+            return []
+        except Exception as e:
+            logger.error(f"Finnhub API error for {ticker}: {e}")
+            return []
+    
+    def _parse_finnhub_article(self, item: Dict[str, Any], ticker: str) -> Optional[Dict[str, Any]]:
+        """
+        Parse a Finnhub news item into article dictionary.
+        
+        Args:
+            item: Finnhub news item
+            ticker: Stock ticker
+        
+        Returns:
+            Article dictionary or None
+        """
+        try:
+            # Finnhub returns timestamp in Unix format
+            published_timestamp = item.get('datetime', 0)
+            published_date = datetime.fromtimestamp(published_timestamp) if published_timestamp else None
+            
+            article = {
+                'ticker': ticker,
+                'title': clean_text(item.get('headline', '')),
+                'url': item.get('url', ''),
+                'summary': clean_text(item.get('summary', '')),
+                'content': clean_text(item.get('summary', '')),  # Finnhub provides summary
+                'source': item.get('source', self.source_name),
+                'published_date': published_date.isoformat() if published_date else None,
+                'scraped_date': datetime.now().isoformat()
+            }
+            
+            # Filter out articles without title or URL
+            if not article['title'] or not article['url']:
+                return None
+            
+            return article
+        
+        except Exception as e:
+            logger.debug(f"Failed to parse Finnhub article: {e}")
+            return None
+
+
 class NewsAggregator:
     """Aggregates news from multiple sources."""
     
@@ -330,6 +447,9 @@ class NewsAggregator:
         
         if config.NEWS_SOURCES['google_news']['enabled']:
             self.scrapers.append(GoogleNewsScraper(self.db_manager))
+        
+        if config.NEWS_SOURCES['finnhub']['enabled'] and config.FINNHUB_API_KEY:
+            self.scrapers.append(FinnhubScraper(self.db_manager))
         
         logger.info(f"Initialized NewsAggregator with {len(self.scrapers)} scrapers")
     
