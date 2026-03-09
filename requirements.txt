@@ -3,10 +3,9 @@
 # Stock data APIs
 yfinance>=0.2.36
 
-# Web scraping
-beautifulsoup4>=4.12.3
+# News API
+finnhub-python>=2.4.19
 requests>=2.31.0
-lxml>=5.1.0
 
 # AI and LLM
 openai>=1.12.0

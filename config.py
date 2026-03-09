@@ -42,18 +42,8 @@ PORTFOLIO_FILE = DATA_DIR / "portfolio.json"
 
 # News Scraping Configuration
 NEWS_SOURCES = {
-    "yahoo_finance": {
-        "enabled": False,  # Disabled due to blocking issues
-        "base_url": "https://finance.yahoo.com/quote/{ticker}/news",
-        "rate_limit": 1.5,  # seconds between requests
-    },
-    "google_news": {
-        "enabled": False,  # Disabled due to RSS issues
-        "base_url": "https://news.google.com/rss/search?q={ticker}+stock",
-        "rate_limit": 1.0,
-    },
     "finnhub": {
-        "enabled": True,  # Recommended - reliable API
+        "enabled": True,
         "rate_limit": 1.0,  # Free tier: 60 calls/minute
     },
 }
