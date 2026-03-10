@@ -9,12 +9,14 @@ from pathlib import Path
 import pickle
 
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_community.vectorstores import FAISS
-from langchain_openai import OpenAIEmbeddings, ChatOpenAI
+from langchain_openai import ChatOpenAI
 from langchain_core.documents import Document
 from langchain_core.prompts import PromptTemplate
 from langchain_classic.chains import ConversationalRetrievalChain, RetrievalQA
 from langchain_classic.memory import ConversationBufferMemory
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
+import numpy as np
 
 import config
 from logger import get_logger
@@ -25,7 +27,7 @@ logger = get_logger("rag_engine")
 
 
 class RAGQueryEngine:
-    """RAG-based question answering system for financial news."""
+    """RAG-based question answering system for financial news using TF-IDF retrieval."""
     
     def __init__(self, db_manager: DatabaseManager = None, api_key: str = None):
         """
@@ -38,19 +40,17 @@ class RAGQueryEngine:
         self.db_manager = db_manager or DatabaseManager()
         self.api_key = api_key or config.OPENAI_API_KEY
         
+        # Use TF-IDF for lightweight retrieval (no neural embeddings needed)
+        logger.info("Initializing TF-IDF retriever (lightweight, no extra dependencies)")
+        self.vectorizer = TfidfVectorizer(max_features=5000, stop_words='english')
+        self.tfidf_matrix = None
+        self.documents = []
+        
+        # Initialize LLM for chat
         if not self.api_key or self.api_key == "your_openai_api_key_here":
-            logger.warning("OpenAI API key not configured. RAG system will not work.")
-            self.embeddings = None
+            logger.warning("OpenAI API key not configured. Chat will not work.")
             self.llm = None
         else:
-            # Initialize embeddings
-            self.embeddings = OpenAIEmbeddings(
-                model=config.OPENAI_EMBEDDING_MODEL,
-                openai_api_key=self.api_key,
-                openai_api_base=config.OPENAI_BASE_URL
-            )
-            
-            # Initialize LLM
             self.llm = ChatOpenAI(
                 model=config.OPENAI_MODEL,
                 temperature=config.LLM_TEMPERATURE,
@@ -69,12 +69,12 @@ class RAGQueryEngine:
         
         self.vector_store_path = config.VECTOR_STORE_PATH
         
-        logger.info("Initialized RAG Query Engine")
+        logger.info("Initialized RAG Query Engine with TF-IDF retrieval")
     
     def _check_components(self):
         """Check if required components are initialized."""
-        if self.embeddings is None or self.llm is None:
-            raise APIError("OpenAI components not initialized. Please configure OPENAI_API_KEY.")
+        if self.llm is None:
+            raise APIError("LLM not initialized. Please configure OPENAI_API_KEY.")
     
     def _create_documents(self, articles: List[Dict[str, Any]]) -> List[Document]:
         """
@@ -156,9 +156,9 @@ class RAGQueryEngine:
         """
         self._check_components()
         
-        # Try to load existing vector store
+        # Try to load existing index
         if not force_rebuild and self._load_vector_store():
-            logger.info("Loaded existing vector store")
+            logger.info("Loaded existing TF-IDF index")
             return
         
         # Get articles if not provided
@@ -166,10 +166,10 @@ class RAGQueryEngine:
             articles = self.db_manager.get_recent_articles(days=days)
         
         if not articles:
-            logger.warning("No articles available to build vector store")
+            logger.warning("No articles available to build index")
             return
         
-        logger.info(f"Building vector store from {len(articles)} articles")
+        logger.info(f"Building TF-IDF index from {len(articles)} articles")
         
         try:
             # Create and split documents
@@ -180,112 +180,99 @@ class RAGQueryEngine:
                 logger.warning("No document chunks created")
                 return
             
-            # Create vector store
-            self.vector_store = FAISS.from_documents(
-                documents=chunks,
-                embedding=self.embeddings
-            )
+            # Store documents
+            self.documents = chunks
             
-            # Save vector store
+            # Create TF-IDF matrix
+            texts = [doc.page_content for doc in chunks]
+            self.tfidf_matrix = self.vectorizer.fit_transform(texts)
+            
+            # Save to disk
             self._save_vector_store()
             
-            # Initialize chains
-            self._initialize_chains()
-            
-            logger.info(f"Vector store built with {len(chunks)} chunks")
+            logger.info(f"TF-IDF index built with {len(chunks)} chunks")
         
         except Exception as e:
-            logger.error(f"Failed to build vector store: {e}")
-            raise VectorStoreError(f"Failed to build vector store: {e}")
+            logger.error(f"Failed to build TF-IDF index: {e}")
+            raise VectorStoreError(f"Failed to build TF-IDF index: {e}")
     
     def _save_vector_store(self):
-        """Save vector store to disk."""
+        """Save TF-IDF index to disk."""
         try:
             self.vector_store_path.mkdir(parents=True, exist_ok=True)
             
-            # Save FAISS index
-            self.vector_store.save_local(str(self.vector_store_path))
+            # Save with pickle
+            import pickle
+            save_data = {
+                'vectorizer': self.vectorizer,
+                'tfidf_matrix': self.tfidf_matrix,
+                'documents': self.documents
+            }
             
-            logger.info(f"Vector store saved to {self.vector_store_path}")
+            with open(self.vector_store_path / 'tfidf_index.pkl', 'wb') as f:
+                pickle.dump(save_data, f)
+            
+            logger.info(f"TF-IDF index saved to {self.vector_store_path}")
         except Exception as e:
-            logger.error(f"Failed to save vector store: {e}")
+            logger.error(f"Failed to save TF-IDF index: {e}")
     
     def _load_vector_store(self) -> bool:
         """
-        Load vector store from disk.
+        Load TF-IDF index from disk.
         
         Returns:
             True if loaded successfully, False otherwise
         """
         try:
-            index_file = self.vector_store_path / "index.faiss"
+            index_file = self.vector_store_path / "tfidf_index.pkl"
             if not index_file.exists():
                 return False
             
-            self.vector_store = FAISS.load_local(
-                str(self.vector_store_path),
-                self.embeddings,
-                allow_dangerous_deserialization=True  # We trust our own saved data
-            )
+            import pickle
+            with open(index_file, 'rb') as f:
+                save_data = pickle.load(f)
             
-            self._initialize_chains()
+            self.vectorizer = save_data['vectorizer']
+            self.tfidf_matrix = save_data['tfidf_matrix']
+            self.documents = save_data['documents']
             
-            logger.info("Vector store loaded from disk")
+            logger.info("TF-IDF index loaded from disk")
             return True
         
         except Exception as e:
-            logger.warning(f"Failed to load vector store: {e}")
+            logger.warning(f"Failed to load TF-IDF index: {e}")
             return False
     
-    def _initialize_chains(self):
-        """Initialize QA and conversation chains."""
-        if self.vector_store is None:
-            logger.warning("Vector store not available, cannot initialize chains")
-            return
+    def _retrieve_relevant_docs(self, query: str, k: int = 5) -> List[Document]:
+        """
+        Retrieve relevant documents using TF-IDF similarity.
         
-        # Create retriever
-        retriever = self.vector_store.as_retriever(
-            search_kwargs={"k": config.RAG_TOP_K}
-        )
+        Args:
+            query: Search query
+            k: Number of documents to retrieve
         
-        # Create custom prompt
-        prompt_template = f"""{config.RAG_SYSTEM_PROMPT}
-
-Context: {{context}}
-
-Question: {{question}}
-
-Answer:"""
+        Returns:
+            List of relevant documents
+        """
+        if self.tfidf_matrix is None or not self.documents:
+            return []
         
-        QA_PROMPT = PromptTemplate(
-            template=prompt_template,
-            input_variables=["context", "question"]
-        )
+        # Transform query
+        query_vec = self.vectorizer.transform([query])
         
-        # Initialize RetrievalQA chain
-        self.qa_chain = RetrievalQA.from_chain_type(
-            llm=self.llm,
-            chain_type=config.RAG_CHAIN_TYPE,
-            retriever=retriever,
-            return_source_documents=True,
-            chain_type_kwargs={"prompt": QA_PROMPT}
-        )
+        # Calculate similarities
+        similarities = cosine_similarity(query_vec, self.tfidf_matrix).flatten()
         
-        # Initialize Conversational chain for multi-turn conversations
-        self.conversation_chain = ConversationalRetrievalChain.from_llm(
-            llm=self.llm,
-            retriever=retriever,
-            memory=self.memory,
-            return_source_documents=True,
-            verbose=False
-        )
+        # Get top k indices
+        top_indices = np.argsort(similarities)[-k:][::-1]
         
-        logger.debug("QA chains initialized")
+        # Return documents
+        return [self.documents[i] for i in top_indices if similarities[i] > 0]
     
     def query(self, question: str, use_conversation: bool = True, 
               use_cache: bool = True) -> Dict[str, Any]:
         """
-        Query the RAG system.
+        Query the RAG system using TF-IDF retrieval.
         
         Args:
             question: User question
@@ -297,8 +284,8 @@ Answer:"""
         """
         self._check_components()
         
-        if self.vector_store is None:
-            raise VectorStoreError("Vector store not initialized. Call build_vector_store() first.")
+        if self.tfidf_matrix is None or not self.documents:
+            raise VectorStoreError("TF-IDF index not initialized. Call build_vector_store() first.")
         
         # Check cache
         if use_cache:
@@ -312,18 +299,35 @@ Answer:"""
                 }
         
         try:
-            # Choose chain based on conversation flag
-            if use_conversation and self.conversation_chain:
-                result = self.conversation_chain({"question": question})
+            # Retrieve relevant documents
+            source_docs = self._retrieve_relevant_docs(question, k=config.RAG_TOP_K)
+            
+            if not source_docs:
+                answer = "I don't have enough information to answer that question based on the available articles."
+                sources = "No relevant sources found"
             else:
-                result = self.qa_chain({"query": question})
-            
-            # Extract answer and sources
-            answer = result.get('answer', result.get('result', ''))
-            source_docs = result.get('source_documents', [])
-            
-            # Format sources
-            sources = self._format_sources(source_docs)
+                # Build context from retrieved documents
+                context = "\n\n".join([
+                    f"Article: {doc.metadata.get('title', 'Unknown')}\n{doc.page_content}"
+                    for doc in source_docs[:3]  # Use top 3 docs
+                ])
+                
+                # Create prompt
+                prompt = f"""{config.RAG_SYSTEM_PROMPT}
+
+Context from recent financial news:
+{context}
+
+Question: {question}
+
+Answer:"""
+                
+                # Call LLM
+                response_msg = self.llm.invoke(prompt)
+                answer = response_msg.content if hasattr(response_msg, 'content') else str(response_msg)
+                
+                # Format sources
+                sources = self._format_sources(source_docs)
             
             response = {
                 'answer': answer,
@@ -381,12 +385,12 @@ Answer:"""
         Returns:
             List of relevant article metadata
         """
-        if self.vector_store is None:
-            raise VectorStoreError("Vector store not initialized")
+        if self.tfidf_matrix is None or not self.documents:
+            raise VectorStoreError("TF-IDF index not initialized")
         
         try:
-            # Perform similarity search
-            docs = self.vector_store.similarity_search(query, k=k)
+            # Retrieve relevant documents
+            docs = self._retrieve_relevant_docs(query, k=k)
             
             # Extract metadata
             results = []

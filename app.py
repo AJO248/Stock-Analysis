@@ -383,10 +383,10 @@ def render_settings():
     
     with col2:
         if st.button("🔨 Rebuild Vector Store", use_container_width=True):
-            with st.spinner("Rebuilding vector store..."):
+            with st.spinner("Rebuilding TF-IDF index..."):
                 success = st.session_state.pipeline.rebuild_vector_store()
                 if success:
-                    st.success("✅ Vector store rebuilt")
+                    st.success("✅ Index rebuilt")
                 else:
                     st.error("❌ Failed to rebuild")
     

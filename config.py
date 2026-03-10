@@ -26,9 +26,16 @@ OPENAI_EMBEDDING_MODEL = os.getenv("OPENAI_EMBEDDING_MODEL", "text-embedding-3-s
 OPENAI_MAX_RETRIES = int(os.getenv("OPENAI_MAX_RETRIES", "3"))
 OPENAI_TIMEOUT = int(os.getenv("OPENAI_TIMEOUT", "60"))
 
+# Separate config for embeddings (can use different endpoint/key)
+OPENAI_EMBEDDINGS_API_KEY = os.getenv("OPENAI_EMBEDDINGS_API_KEY", OPENAI_API_KEY)
+OPENAI_EMBEDDINGS_BASE_URL = os.getenv("OPENAI_EMBEDDINGS_BASE_URL", OPENAI_BASE_URL)
+
 # Finnhub API Configuration
 FINNHUB_API_KEY = os.getenv("FINNHUB_API_KEY", "")
 FINNHUB_ENABLED = bool(FINNHUB_API_KEY)  # Auto-enable if key is set
+
+# RAG Feature Toggle (uses lightweight TF-IDF - no extra dependencies)
+RAG_ENABLED = os.getenv("RAG_ENABLED", "true").lower() == "true"  # Enabled by default
 
 # LLM Parameters
 LLM_TEMPERATURE = 0.3  # Lower temperature for more focused financial analysis

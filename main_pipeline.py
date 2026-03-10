@@ -29,7 +29,7 @@ class DataPipeline:
         self.portfolio = StockPortfolio()
         self.news_aggregator = NewsAggregator(self.db_manager)
         self.summarizer = NewsSummarizer(self.db_manager)
-        self.rag_engine = RAGQueryEngine(self.db_manager)
+        self.rag_engine = RAGQueryEngine(self.db_manager) if config.RAG_ENABLED else None
         
         logger.info("Data Pipeline initialized successfully")
     
@@ -111,27 +111,30 @@ class DataPipeline:
             logger.info(f"Generated {summarized_count} summaries")
             
             # Step 4: Update vector store
-            logger.info(f"Step 4/4: Updating RAG vector store")
-            try:
-                # Get all recent articles for vector store
-                all_articles = self.db_manager.get_recent_articles(
-                    days=config.ARTICLE_MAX_AGE_DAYS
-                )
-                
-                if all_articles:
-                    self.rag_engine.build_vector_store(
-                        articles=all_articles,
-                        force_rebuild=True
+            if self.rag_engine:
+                logger.info(f"Step 4/4: Updating RAG vector store")
+                try:
+                    # Get all recent articles for vector store
+                    all_articles = self.db_manager.get_recent_articles(
+                        days=config.ARTICLE_MAX_AGE_DAYS
                     )
-                    results['vector_store_updated'] = True
-                    logger.info("Vector store updated successfully")
-                else:
-                    logger.warning("No articles available for vector store")
-            
-            except Exception as e:
-                logger.error(f"Failed to update vector store: {e}")
-                results['errors'].append(f"Vector store update failed: {e}")
-                results['vector_store_updated'] = False
+                    
+                    if all_articles:
+                        self.rag_engine.build_vector_store(
+                            articles=all_articles,
+                            force_rebuild=True
+                        )
+                        results['vector_store_updated'] = True
+                        logger.info("Vector store updated successfully")
+                    else:
+                        logger.warning("No articles available for vector store")
+                
+                except Exception as e:
+                    logger.error(f"Failed to update vector store: {e}")
+                    results['errors'].append(f"Vector store update failed: {e}")
+                    results['vector_store_updated'] = False
+            else:
+                logger.info("Step 4/4: Skipping RAG vector store (disabled)")
             
             # Calculate duration
             end_time = datetime.now()
@@ -227,7 +230,7 @@ class DataPipeline:
             'portfolio_size': len(portfolio),
             'portfolio_tickers': portfolio,
             'database_stats': db_stats,
-            'vector_store_exists': (config.VECTOR_STORE_PATH / "index.faiss").exists(),
+            'vector_store_exists': (config.VECTOR_STORE_PATH / "tfidf_index.pkl").exists(),
             'configuration': {
                 'openai_configured': bool(config.OPENAI_API_KEY and 
                                          config.OPENAI_API_KEY != "your_openai_api_key_here"),
@@ -255,6 +258,10 @@ class DataPipeline:
         Args:
             days: Include articles from last N days
         """
+        if not self.rag_engine:
+            logger.warning("RAG is disabled. Cannot rebuild vector store.")
+            return False
+        
         logger.info(f"Rebuilding vector store with articles from last {days} days")
         
         try:
