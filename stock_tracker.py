@@ -10,11 +10,16 @@ from pathlib import Path
 
 import yfinance as yf
 import pandas as pd
+import requests
 
 import config
 from logger import get_logger
 from exceptions import PortfolioError
 from utils import validate_ticker, format_currency, format_percentage, calculate_percentage_change
+
+# yfinance surfaces failures either as requests-level network errors or as
+# malformed/missing data in the response payload it parses into dicts.
+YFINANCE_ERRORS = (requests.exceptions.RequestException, KeyError, ValueError, TypeError)
 
 logger = get_logger("stock_tracker")
 
@@ -49,7 +54,7 @@ class StockPortfolio:
                 self.save_portfolio()
                 logger.info(f"Initialized new portfolio with default tickers")
         
-        except Exception as e:
+        except (OSError, json.JSONDecodeError) as e:
             logger.error(f"Failed to load portfolio: {e}")
             self.tickers = config.DEFAULT_TICKERS.copy()
     
@@ -63,8 +68,8 @@ class StockPortfolio:
             with open(self.portfolio_file, 'w') as f:
                 json.dump(data, f, indent=2)
             logger.debug("Portfolio saved successfully")
-        
-        except Exception as e:
+
+        except OSError as e:
             raise PortfolioError(f"Failed to save portfolio: {e}")
     
     def add_stock(self, ticker: str) -> bool:
@@ -94,7 +99,7 @@ class StockPortfolio:
             if not info or 'symbol' not in info:
                 logger.warning(f"Ticker {ticker} not found in yfinance")
                 return False
-        except Exception as e:
+        except YFINANCE_ERRORS as e:
             logger.error(f"Failed to verify ticker {ticker}: {e}")
             return False
         
@@ -207,8 +212,8 @@ class StockPortfolio:
             
             logger.debug(f"Fetched data for {ticker}: ${current_price:.2f} ({percent_change:+.2f}%)")
             return stock_data
-        
-        except Exception as e:
+
+        except YFINANCE_ERRORS as e:
             logger.error(f"Failed to fetch data for {ticker}: {e}")
             return None
     
@@ -297,8 +302,8 @@ class StockPortfolio:
             
             logger.debug(f"Fetched {len(hist)} historical records for {ticker}")
             return hist
-        
-        except Exception as e:
+
+        except YFINANCE_ERRORS as e:
             logger.error(f"Failed to fetch historical data for {ticker}: {e}")
             return None
 
@@ -317,6 +322,6 @@ def get_stock_info(ticker: str) -> Optional[Dict[str, Any]]:
     try:
         stock = yf.Ticker(ticker.upper())
         return stock.info
-    except Exception as e:
+    except YFINANCE_ERRORS as e:
         logger.error(f"Failed to get info for {ticker}: {e}")
         return None

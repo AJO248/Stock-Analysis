@@ -230,7 +230,7 @@ class DataPipeline:
             'portfolio_size': len(portfolio),
             'portfolio_tickers': portfolio,
             'database_stats': db_stats,
-            'vector_store_exists': (config.VECTOR_STORE_PATH / "tfidf_index.pkl").exists(),
+            'vector_store_exists': (config.VECTOR_STORE_PATH / "index.faiss").exists(),
             'configuration': {
                 'openai_configured': bool(config.OPENAI_API_KEY and 
                                          config.OPENAI_API_KEY != "your_openai_api_key_here"),

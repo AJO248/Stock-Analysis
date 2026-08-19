@@ -22,19 +22,17 @@ LOGS_DIR.mkdir(exist_ok=True)
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1")
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-3.5-turbo")
-OPENAI_EMBEDDING_MODEL = os.getenv("OPENAI_EMBEDDING_MODEL", "text-embedding-3-small")
 OPENAI_MAX_RETRIES = int(os.getenv("OPENAI_MAX_RETRIES", "3"))
 OPENAI_TIMEOUT = int(os.getenv("OPENAI_TIMEOUT", "60"))
 
-# Separate config for embeddings (can use different endpoint/key)
-OPENAI_EMBEDDINGS_API_KEY = os.getenv("OPENAI_EMBEDDINGS_API_KEY", OPENAI_API_KEY)
-OPENAI_EMBEDDINGS_BASE_URL = os.getenv("OPENAI_EMBEDDINGS_BASE_URL", OPENAI_BASE_URL)
+# Local embedding model for RAG (via sentence-transformers / HuggingFaceEmbeddings)
+EMBEDDING_MODEL_NAME = os.getenv("EMBEDDING_MODEL_NAME", "sentence-transformers/all-MiniLM-L6-v2")
 
 # Finnhub API Configuration
 FINNHUB_API_KEY = os.getenv("FINNHUB_API_KEY", "")
 FINNHUB_ENABLED = bool(FINNHUB_API_KEY)  # Auto-enable if key is set
 
-# RAG Feature Toggle (uses lightweight TF-IDF - no extra dependencies)
+# RAG Feature Toggle (uses local sentence-transformers embeddings + FAISS)
 RAG_ENABLED = os.getenv("RAG_ENABLED", "true").lower() == "true"  # Enabled by default
 
 # LLM Parameters
@@ -67,7 +65,6 @@ ARTICLE_MAX_AGE_DAYS = 7
 STOCK_CACHE_DURATION = int(os.getenv("STOCK_CACHE_DURATION", "300"))  # 5 minutes
 NEWS_CACHE_DURATION = int(os.getenv("NEWS_CACHE_DURATION", "3600"))  # 1 hour
 SUMMARY_CACHE_DURATION = int(os.getenv("SUMMARY_CACHE_DURATION", "86400"))  # 24 hours
-VECTOR_STORE_REFRESH_HOURS = 6
 
 # Database Configuration
 DB_PATH = Path(os.getenv("DB_PATH", str(DATA_DIR / "news_cache.db")))
@@ -76,8 +73,6 @@ VECTOR_STORE_PATH.mkdir(parents=True, exist_ok=True)
 
 # RAG Configuration
 RAG_TOP_K = 5  # Number of documents to retrieve
-RAG_SIMILARITY_THRESHOLD = 0.7
-RAG_CHAIN_TYPE = "stuff"  # Options: stuff, map_reduce, refine, map_rerank
 
 # Logging Configuration
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")

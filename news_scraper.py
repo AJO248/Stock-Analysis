@@ -10,7 +10,7 @@ import requests
 
 import config
 from logger import get_logger
-from exceptions import ScraperError, NetworkError, ParsingError
+from exceptions import ScraperError, NetworkError, ParsingError, DatabaseError
 from utils import clean_text, validate_url, parse_date, retry_with_backoff
 from database import DatabaseManager
 
@@ -130,7 +130,7 @@ class FinnhubScraper(BaseScraper):
                         else:
                             logger.debug(f"Article already in DB: {article['url']}")
                 
-                except Exception as e:
+                except (KeyError, ValueError, TypeError, DatabaseError) as e:
                     logger.warning(f"Failed to parse Finnhub article: {e}")
                     continue
             
@@ -142,8 +142,11 @@ class FinnhubScraper(BaseScraper):
         except ImportError:
             logger.error("finnhub-python package not installed. Run: pip install finnhub-python")
             return []
-        except Exception as e:
-            logger.error(f"Finnhub API error for {ticker}: {e}")
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Finnhub network error for {ticker}: {e}")
+            return []
+        except (KeyError, ValueError, TypeError) as e:
+            logger.error(f"Finnhub API returned unexpected data for {ticker}: {e}")
             return []
     
     def _parse_finnhub_article(self, item: Dict[str, Any], ticker: str) -> Optional[Dict[str, Any]]:
@@ -178,8 +181,8 @@ class FinnhubScraper(BaseScraper):
                 return None
             
             return article
-        
-        except Exception as e:
+
+        except (KeyError, ValueError, TypeError) as e:
             logger.debug(f"Failed to parse Finnhub article: {e}")
             return None
 

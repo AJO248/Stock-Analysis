@@ -206,7 +206,7 @@ class NewsSummarizer:
                 logger.warning("Rate limit reached, stopping batch summarization")
                 # Return what we have so far
                 break
-            except Exception as e:
+            except (APIError, SummarizationError) as e:
                 logger.error(f"Failed to summarize article {article.get('title', '')[:50]}: {e}")
                 # Continue with other articles
                 continue
@@ -272,8 +272,8 @@ Overall Analysis:"""
             overall_summary = response.choices[0].message.content.strip()
             logger.info(f"Generated overall summary for {ticker}")
             return overall_summary
-        
-        except Exception as e:
+
+        except (RateLimitError, OpenAIError) as e:
             logger.error(f"Failed to generate overall summary for {ticker}: {e}")
             return None
     
