@@ -134,3 +134,29 @@ class TestCleanupAndStats:
         assert stats["total_summaries"] == 0
         assert stats["unique_tickers"] == 0
         assert stats["cached_queries"] == 0
+
+    def test_clear_all_data_removes_everything_regardless_of_age(self, db, sample_articles):
+        for article in sample_articles:
+            article_id = db.save_article(article)
+            db.save_summary(article_id, "summary text")
+        db.cache_query("q", "a")
+
+        result = db.clear_all_data()
+
+        assert result["deleted_articles"] == len(sample_articles)
+        assert result["deleted_summaries"] == len(sample_articles)
+        assert result["deleted_queries"] == 1
+
+        stats = db.get_stats()
+        assert stats["total_articles"] == 0
+        assert stats["total_summaries"] == 0
+        assert stats["cached_queries"] == 0
+
+    def test_clear_all_data_on_empty_db(self, db):
+        result = db.clear_all_data()
+        assert result == {
+            "deleted_articles": 0,
+            "deleted_summaries": 0,
+            "deleted_embeddings_metadata": 0,
+            "deleted_queries": 0,
+        }

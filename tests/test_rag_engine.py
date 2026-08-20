@@ -1,10 +1,11 @@
 """
 Tests for RAGQueryEngine (rag_engine.py).
 
-Builds a real FAISS index from a handful of fixture articles using the local
-sentence-transformers embedding model (no network calls to an embeddings API -
-just a one-time local model load). The chat LLM is mocked so no OpenAI-compatible
-API key or network access is required for query()/conversation-memory tests.
+Builds a real FAISS index from a handful of fixture articles using a
+deterministic fake embeddings client (see conftest.FakeEmbeddings) - no
+network calls to an embeddings API. The chat LLM is mocked so no
+OpenAI-compatible API key or network access is required for
+query()/conversation-memory tests either.
 """
 
 from pathlib import Path
@@ -24,12 +25,13 @@ def rag_db(temp_db_path: Path) -> DatabaseManager:
 
 
 @pytest.fixture
-def built_engine(tmp_path: Path, rag_db, sample_articles, monkeypatch):
+def built_engine(tmp_path: Path, rag_db, sample_articles, fake_embeddings, monkeypatch):
     """A RAGQueryEngine with a real FAISS index built from sample_articles."""
     monkeypatch.setattr(config, "VECTOR_STORE_PATH", tmp_path / "vector_store")
 
     engine = RAGQueryEngine(db_manager=rag_db, api_key="test-key")
     engine.vector_store_path = config.VECTOR_STORE_PATH
+    engine._embeddings = fake_embeddings  # bypass the real embeddings API
 
     for article in sample_articles:
         article["id"] = rag_db.save_article(article)
@@ -44,6 +46,25 @@ class TestBuildVectorStore:
 
     def test_index_persisted_to_disk(self, built_engine):
         assert (built_engine.vector_store_path / "index.faiss").exists()
+
+
+class TestClearVectorStore:
+    def test_clear_removes_index_files_and_resets_state(self, built_engine):
+        assert (built_engine.vector_store_path / "index.faiss").exists()
+
+        built_engine.clear_vector_store()
+
+        assert not (built_engine.vector_store_path / "index.faiss").exists()
+        assert not (built_engine.vector_store_path / "index.pkl").exists()
+        assert built_engine.vector_store is None
+
+    def test_clear_also_resets_conversation_memory(self, built_engine):
+        built_engine.memory.save_context({"question": "Q"}, {"answer": "A"})
+        assert len(built_engine.memory.chat_memory.messages) > 0
+
+        built_engine.clear_vector_store()
+
+        assert len(built_engine.memory.chat_memory.messages) == 0
 
 
 class TestRetrieval:

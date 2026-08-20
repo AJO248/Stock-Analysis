@@ -8,6 +8,7 @@ import re
 import streamlit as st
 
 from logger import get_logger
+from ui_components import ICONS
 
 logger = get_logger("app")
 
@@ -28,8 +29,8 @@ def _render_sources(sources: str):
             st.markdown(
                 f"<a href='{url}' target='_blank' style='display:inline-block; "
                 f"margin:2px 4px 2px 0; padding:4px 10px; border-radius:14px; "
-                f"background-color:#EAF4EF; color:#1B7F5F; text-decoration:none; "
-                f"font-size:0.85em;'>🔗 {label}</a>",
+                f"background-color:var(--app-info-bg); color:var(--app-info-fg); "
+                f"text-decoration:none; font-size:0.85em;'>{label}</a>",
                 unsafe_allow_html=True,
             )
         else:
@@ -38,7 +39,7 @@ def _render_sources(sources: str):
 
 def render_ai_assistant():
     """Render AI assistant with RAG-based Q&A."""
-    st.title("💬 AI Assistant")
+    st.title(f"{ICONS['chat']} AI Assistant")
 
     st.write("Ask questions about your stocks and recent financial news.")
 
@@ -46,26 +47,26 @@ def render_ai_assistant():
     status = st.session_state.pipeline.get_pipeline_status()
 
     if not status['configuration']['openai_configured']:
-        st.error("⚠️ OpenAI API key not configured. Please set OPENAI_API_KEY in .env file.")
+        st.error(f"{ICONS['warning']} OpenAI API key not configured. Please set OPENAI_API_KEY in .env file.")
         return
 
     if not status['vector_store_exists']:
-        st.warning("⚠️ RAG system not initialized. Please fetch news first from the News Feed page.")
+        st.warning(f"{ICONS['warning']} RAG system not initialized. Please fetch news first from the News Feed page.")
         if st.button("Initialize RAG System"):
             with st.spinner("Building vector store..."):
-                success = st.session_state.pipeline.rebuild_vector_store()
-                if success:
+                result = st.session_state.pipeline.rebuild_vector_store()
+                if result['success']:
                     st.success("RAG system initialized!")
                     st.rerun()
                 else:
-                    st.error("Failed to initialize RAG system")
+                    st.error(f"Failed to initialize RAG system: {result['error']}")
         return
 
     # Controls
     col1, col2 = st.columns([3, 1])
 
     with col2:
-        if st.button("🗑️ Clear History", use_container_width=True):
+        if st.button(f"{ICONS['delete']} Clear History", use_container_width=True):
             st.session_state.chat_history = []
             st.session_state.pipeline.rag_engine.clear_conversation_history()
             st.rerun()
@@ -75,7 +76,7 @@ def render_ai_assistant():
         with st.chat_message(message["role"]):
             st.write(message["content"])
             if "sources" in message and message["sources"]:
-                with st.expander("📚 Sources"):
+                with st.expander(f"{ICONS['sources']} Sources"):
                     _render_sources(message["sources"])
 
     # Chat input
@@ -106,7 +107,7 @@ def render_ai_assistant():
                     st.write(answer)
 
                     if sources:
-                        with st.expander("📚 Sources"):
+                        with st.expander(f"{ICONS['sources']} Sources"):
                             _render_sources(sources)
 
                     # Add assistant message to history
@@ -121,7 +122,7 @@ def render_ai_assistant():
                     logger.error(f"Query failed: {e}")
 
     # Example questions
-    with st.expander("💡 Example Questions"):
+    with st.expander("Example Questions"):
         st.write("- What's the recent news about AAPL?")
         st.write("- What is the sentiment on TSLA stock?")
         st.write("- Summarize the latest tech stock news")

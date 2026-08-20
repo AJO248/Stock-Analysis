@@ -16,8 +16,7 @@ langchain-community==0.4.2
 langchain-text-splitters==1.1.2
 langchain-core==1.6.0
 
-# Retrieval (local embeddings + vector store)
-sentence-transformers==6.0.0
+# Retrieval (API embeddings + vector store)
 faiss-cpu==1.15.0
 
 # Data processing

@@ -287,31 +287,81 @@ class DatabaseManager:
             logger.error(f"Failed to get cached query: {e}")
             return None
     
-    def cleanup_old_data(self, days: int = 30):
+    def cleanup_old_data(self, days: int = 30) -> Dict[str, int]:
         """
         Remove old data from database.
-        
+
         Args:
             days: Remove data older than this many days
+
+        Returns:
+            Dictionary with counts of deleted rows: {'deleted_articles', 'deleted_queries'}
         """
         try:
             with self._get_connection() as conn:
                 cursor = conn.cursor()
                 cutoff_date = (datetime.now() - timedelta(days=days)).isoformat()
-                
+
                 # Delete old articles and cascading data
                 cursor.execute("DELETE FROM articles WHERE scraped_date < ?", (cutoff_date,))
                 deleted_articles = cursor.rowcount
-                
+
                 # Delete old query cache
                 cursor.execute("DELETE FROM query_cache WHERE created_date < ?", (cutoff_date,))
                 deleted_queries = cursor.rowcount
-                
+
                 conn.commit()
                 logger.info(f"Cleanup: removed {deleted_articles} articles and {deleted_queries} cached queries")
-        
+                return {'deleted_articles': deleted_articles, 'deleted_queries': deleted_queries}
+
         except sqlite3.Error as e:
             logger.error(f"Failed to cleanup old data: {e}")
+            return {'deleted_articles': 0, 'deleted_queries': 0}
+
+    def clear_all_data(self) -> Dict[str, int]:
+        """
+        Remove all cached data from the database, regardless of age.
+
+        Returns:
+            Dictionary with counts of deleted rows: {'deleted_articles',
+            'deleted_summaries', 'deleted_embeddings_metadata', 'deleted_queries'}
+        """
+        try:
+            with self._get_connection() as conn:
+                cursor = conn.cursor()
+
+                cursor.execute("DELETE FROM query_cache")
+                deleted_queries = cursor.rowcount
+
+                cursor.execute("DELETE FROM embeddings_metadata")
+                deleted_embeddings_metadata = cursor.rowcount
+
+                cursor.execute("DELETE FROM summaries")
+                deleted_summaries = cursor.rowcount
+
+                cursor.execute("DELETE FROM articles")
+                deleted_articles = cursor.rowcount
+
+                conn.commit()
+                logger.info(
+                    f"Cleared all data: {deleted_articles} articles, {deleted_summaries} summaries, "
+                    f"{deleted_embeddings_metadata} embeddings_metadata, {deleted_queries} cached queries"
+                )
+                return {
+                    'deleted_articles': deleted_articles,
+                    'deleted_summaries': deleted_summaries,
+                    'deleted_embeddings_metadata': deleted_embeddings_metadata,
+                    'deleted_queries': deleted_queries,
+                }
+
+        except sqlite3.Error as e:
+            logger.error(f"Failed to clear all data: {e}")
+            return {
+                'deleted_articles': 0,
+                'deleted_summaries': 0,
+                'deleted_embeddings_metadata': 0,
+                'deleted_queries': 0,
+            }
     
     def get_stats(self) -> Dict[str, int]:
         """Get database statistics."""

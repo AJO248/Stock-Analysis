@@ -7,26 +7,18 @@ from datetime import datetime
 
 import streamlit as st
 
-SENTIMENT_STYLES = {
-    'bullish': {'emoji': '🟢', 'color': '#1B7F5F', 'bg': '#EAF4EF'},
-    'bearish': {'emoji': '🔴', 'color': '#C0392B', 'bg': '#FBEAEA'},
-    'neutral': {'emoji': '⚪', 'color': '#64748B', 'bg': '#F1F5F9'},
+from ui_components import ICONS, badge, section_header
+
+SENTIMENT_KIND = {
+    'bullish': 'success',
+    'bearish': 'danger',
+    'neutral': 'neutral',
 }
-
-
-def _sentiment_badge(sentiment: str) -> str:
-    """Return an HTML span styled as a small colored sentiment chip."""
-    style = SENTIMENT_STYLES.get(sentiment, SENTIMENT_STYLES['neutral'])
-    return (
-        f"<span style='background-color:{style['bg']}; color:{style['color']}; "
-        f"padding:2px 10px; border-radius:12px; font-size:0.85em; font-weight:600;'>"
-        f"{style['emoji']} {sentiment.title()}</span>"
-    )
 
 
 def render_news_feed():
     """Render news feed with articles and summaries."""
-    st.title("📰 News Feed")
+    st.title(f"{ICONS['news']} News Feed")
 
     col1, col2, col3 = st.columns([2, 2, 1])
 
@@ -43,7 +35,7 @@ def render_news_feed():
         days = st.slider("Days to show", 1, 7, 3)
 
     with col3:
-        if st.button("🔄 Fetch News", use_container_width=True):
+        if st.button(f"{ICONS['refresh']} Fetch News", use_container_width=True):
             with st.spinner("Fetching and summarizing news..."):
                 tickers = [selected_ticker] if selected_ticker != "All" else None
                 st.session_state.pipeline.run_full_update(tickers)
@@ -69,7 +61,7 @@ def render_news_feed():
         sentiment = summary_data.get('sentiment', 'neutral') if summary_data else 'neutral'
 
         with st.expander(f"**[{article['ticker']}]** {article['title']}", expanded=False):
-            st.markdown(_sentiment_badge(sentiment), unsafe_allow_html=True)
+            badge(sentiment.title(), SENTIMENT_KIND.get(sentiment, 'neutral'))
             st.write("")
 
             col1, col2 = st.columns([3, 1])
@@ -88,4 +80,4 @@ def render_news_feed():
                     st.write(f"**Published:** {pub_date.strftime('%Y-%m-%d')}")
 
                 if article.get('url'):
-                    st.markdown(f"[Read Full Article]({article['url']})")
+                    st.markdown(f"[{ICONS['link']} Read Full Article]({article['url']})")

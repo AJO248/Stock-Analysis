@@ -1,19 +1,23 @@
 """
 Retrieval-Augmented Generation (RAG) engine for question-answering.
 Uses a LangChain document pipeline (loading + chunking financial news articles),
-local sentence-transformers embeddings (via HuggingFaceEmbeddings), and a FAISS
-vector store for semantic similarity search. Conversation history is tracked
-with LangChain's ConversationBufferMemory so multi-turn chats retain context.
+API-based embeddings (via OpenAIEmbeddings), and a FAISS vector store for
+semantic similarity search. Conversation history is tracked with LangChain's
+ConversationBufferMemory so multi-turn chats retain context.
+
+Note: embeddings are called via config.OPENAI_EMBEDDINGS_BASE_URL (defaults to
+OPENAI_BASE_URL). Not every OpenAI-compatible chat endpoint also serves an
+embeddings route - if yours doesn't, point OPENAI_EMBEDDINGS_BASE_URL /
+OPENAI_EMBEDDINGS_API_KEY at one that does (e.g. real OpenAI) in .env.
 """
 
 from typing import List, Dict, Any
 from pathlib import Path
 
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_openai import ChatOpenAI
+from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from langchain_core.documents import Document
 from langchain_community.vectorstores import FAISS
-from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_classic.memory import ConversationBufferMemory
 
 import config
@@ -37,10 +41,12 @@ class RAGQueryEngine:
         """
         self.db_manager = db_manager or DatabaseManager()
         self.api_key = api_key or config.OPENAI_API_KEY
+        self.embeddings_api_key = config.OPENAI_EMBEDDINGS_API_KEY or self.api_key
+        self.embeddings_base_url = config.OPENAI_EMBEDDINGS_BASE_URL or config.OPENAI_BASE_URL
 
-        # Local embeddings model - no external embeddings API required
-        logger.info(f"Loading local embedding model: {config.EMBEDDING_MODEL_NAME}")
-        self.embeddings = HuggingFaceEmbeddings(model_name=config.EMBEDDING_MODEL_NAME)
+        # API-based embeddings client - created lazily (see `embeddings` property
+        # below) so it's only built once RAG is actually used.
+        self._embeddings = None
 
         # Initialize LLM for chat
         if not self.api_key or self.api_key == "your_openai_api_key_here":
@@ -64,6 +70,23 @@ class RAGQueryEngine:
         self.vector_store_path = config.VECTOR_STORE_PATH
 
         logger.info("Initialized RAG Query Engine with FAISS retrieval")
+
+    @property
+    def embeddings(self) -> OpenAIEmbeddings:
+        """Lazily create the embeddings client on first use."""
+        if self._embeddings is None:
+            if not self.embeddings_api_key or self.embeddings_api_key == "your_openai_api_key_here":
+                raise VectorStoreError(
+                    "No embeddings API key configured. Set OPENAI_API_KEY (or "
+                    "OPENAI_EMBEDDINGS_API_KEY to use a different provider for embeddings)."
+                )
+            logger.info(f"Creating embeddings client for model: {config.EMBEDDING_MODEL_NAME}")
+            self._embeddings = OpenAIEmbeddings(
+                model=config.EMBEDDING_MODEL_NAME,
+                openai_api_key=self.embeddings_api_key,
+                openai_api_base=self.embeddings_base_url,
+            )
+        return self._embeddings
 
     def _check_components(self):
         """Check if required components are initialized."""
@@ -219,6 +242,16 @@ class RAGQueryEngine:
         except (OSError, RuntimeError, ValueError) as e:
             logger.warning(f"Failed to load FAISS index: {e}")
             return False
+
+    def clear_vector_store(self):
+        """Delete the persisted FAISS index and reset in-memory state/conversation history."""
+        for filename in ("index.faiss", "index.pkl"):
+            file_path = self.vector_store_path / filename
+            if file_path.exists():
+                file_path.unlink()
+        self.vector_store = None
+        self.memory.clear()
+        logger.info("Vector store cleared")
 
     def _retrieve_relevant_docs(self, query: str, k: int = 5) -> List[Document]:
         """

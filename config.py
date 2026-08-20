@@ -25,14 +25,18 @@ OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-3.5-turbo")
 OPENAI_MAX_RETRIES = int(os.getenv("OPENAI_MAX_RETRIES", "3"))
 OPENAI_TIMEOUT = int(os.getenv("OPENAI_TIMEOUT", "60"))
 
-# Local embedding model for RAG (via sentence-transformers / HuggingFaceEmbeddings)
-EMBEDDING_MODEL_NAME = os.getenv("EMBEDDING_MODEL_NAME", "sentence-transformers/all-MiniLM-L6-v2")
+# API-based embedding model for RAG (via OpenAIEmbeddings). Defaults to the same
+# endpoint/key as chat; override with OPENAI_EMBEDDINGS_* if your chat endpoint
+# doesn't also serve an embeddings route (e.g. point it at real OpenAI instead).
+EMBEDDING_MODEL_NAME = os.getenv("EMBEDDING_MODEL_NAME", "text-embedding-3-small")
+OPENAI_EMBEDDINGS_API_KEY = os.getenv("OPENAI_EMBEDDINGS_API_KEY", "")
+OPENAI_EMBEDDINGS_BASE_URL = os.getenv("OPENAI_EMBEDDINGS_BASE_URL", "")
 
 # Finnhub API Configuration
 FINNHUB_API_KEY = os.getenv("FINNHUB_API_KEY", "")
 FINNHUB_ENABLED = bool(FINNHUB_API_KEY)  # Auto-enable if key is set
 
-# RAG Feature Toggle (uses local sentence-transformers embeddings + FAISS)
+# RAG Feature Toggle (uses API-based embeddings + FAISS)
 RAG_ENABLED = os.getenv("RAG_ENABLED", "true").lower() == "true"  # Enabled by default
 
 # LLM Parameters

@@ -2,15 +2,54 @@
 Shared pytest fixtures for the Stock-Analysis test suite.
 """
 
+import hashlib
 from pathlib import Path
 
+import numpy as np
 import pytest
+from langchain_core.embeddings import Embeddings
 
 
 @pytest.fixture
 def temp_db_path(tmp_path: Path) -> Path:
     """Path to a throwaway SQLite database file for a single test."""
     return tmp_path / "test_news_cache.db"
+
+
+class FakeEmbeddings(Embeddings):
+    """Deterministic hashed bag-of-words embeddings - no network/API calls.
+
+    Stands in for the real OpenAIEmbeddings client in tests so RAG retrieval
+    can be exercised end-to-end (real FAISS index, real similarity search)
+    without hitting an embeddings API. Distinctive vocabulary (e.g. "iPhone"
+    vs "Tesla") still separates topically, same as the old TF-IDF behavior.
+    """
+
+    DIM = 256
+
+    def _vectorize(self, text: str) -> list:
+        vec = np.zeros(self.DIM, dtype=np.float32)
+        for word in text.lower().split():
+            word = ''.join(c for c in word if c.isalnum())
+            if not word:
+                continue
+            idx = int(hashlib.md5(word.encode()).hexdigest(), 16) % self.DIM
+            vec[idx] += 1.0
+        norm = np.linalg.norm(vec)
+        if norm > 0:
+            vec = vec / norm
+        return vec.tolist()
+
+    def embed_documents(self, texts: list) -> list:
+        return [self._vectorize(t) for t in texts]
+
+    def embed_query(self, text: str) -> list:
+        return self._vectorize(text)
+
+
+@pytest.fixture
+def fake_embeddings() -> FakeEmbeddings:
+    return FakeEmbeddings()
 
 
 @pytest.fixture

@@ -9,19 +9,21 @@ import streamlit as st
 import plotly.graph_objects as go
 
 from utils import format_percentage
+from ui_components import ICONS, section_header, stat_card
 
-GAIN_COLOR = "#1B7F5F"
-LOSS_COLOR = "#C0392B"
+GAIN_COLOR = "#16A34A"
+LOSS_COLOR = "#DC2626"
+PRIMARY_COLOR = "#D97706"
 
 
 def render_portfolio_dashboard():
     """Render portfolio dashboard with stock prices and performance."""
-    st.title("📊 Portfolio Dashboard")
+    st.title(f"{ICONS['dashboard']} Portfolio Dashboard")
 
     col1, col2 = st.columns([3, 1])
 
     with col2:
-        if st.button("🔄 Refresh Prices", use_container_width=True):
+        if st.button(f"{ICONS['refresh']} Refresh Prices", use_container_width=True):
             with st.spinner("Fetching latest prices..."):
                 st.session_state.pipeline.portfolio.fetch_current_prices(use_cache=False)
                 st.session_state.last_update = datetime.now()
@@ -36,7 +38,7 @@ def render_portfolio_dashboard():
         return
 
     # Metric cards grid
-    st.subheader("📈 Current Positions")
+    section_header("Current Positions", "dashboard")
 
     tickers = list(summary['stocks'].keys())
     cards_per_row = 4
@@ -46,7 +48,7 @@ def render_portfolio_dashboard():
         for col, ticker in zip(cols, row_tickers):
             data = summary['stocks'][ticker]
             with col:
-                st.metric(
+                stat_card(
                     label=f"{ticker} · {data['name']}",
                     value=f"${data['current_price']:,.2f}",
                     delta=f"{data['percent_change']:+.2f}%"
@@ -55,7 +57,7 @@ def render_portfolio_dashboard():
     st.markdown("---")
 
     # Historical price chart
-    st.subheader("📉 Price History")
+    section_header("Price History", "price_chart")
     chart_col1, chart_col2 = st.columns([1, 3])
     with chart_col1:
         selected_ticker = st.selectbox("Select ticker", tickers, key="dashboard_chart_ticker")
@@ -71,9 +73,9 @@ def render_portfolio_dashboard():
                 x=hist.index,
                 y=hist['Close'],
                 mode='lines',
-                line=dict(color="#1B7F5F", width=2),
+                line=dict(color=PRIMARY_COLOR, width=2),
                 fill='tozeroy',
-                fillcolor='rgba(27, 127, 95, 0.1)',
+                fillcolor='rgba(217, 119, 6, 0.12)',
                 name=selected_ticker
             ))
             fig.update_layout(
@@ -82,6 +84,8 @@ def render_portfolio_dashboard():
                 xaxis_title=None,
                 yaxis_title="Price ($)",
                 showlegend=False,
+                paper_bgcolor='rgba(0,0,0,0)',
+                plot_bgcolor='rgba(0,0,0,0)',
             )
             st.plotly_chart(fig, use_container_width=True)
         else:
@@ -90,7 +94,7 @@ def render_portfolio_dashboard():
     st.markdown("---")
 
     # Gainers and losers as a horizontal bar chart
-    st.subheader("📊 Gainers & Losers")
+    section_header("Gainers & Losers", "movers")
 
     movers = summary['gainers'][:5] + summary['losers'][:5]
     if movers:
@@ -112,6 +116,8 @@ def render_portfolio_dashboard():
             height=max(220, 40 * len(movers_tickers)),
             xaxis_title="% Change",
             yaxis_title=None,
+            paper_bgcolor='rgba(0,0,0,0)',
+            plot_bgcolor='rgba(0,0,0,0)',
         )
         st.plotly_chart(fig, use_container_width=True)
     else:

@@ -241,43 +241,64 @@ class DataPipeline:
         
         return status
     
-    def cleanup(self, days: int = 30):
+    def cleanup(self, days: int = 30) -> Dict[str, int]:
         """
         Clean up old data from database.
-        
+
         Args:
             days: Remove data older than this many days
+
+        Returns:
+            Dictionary with counts of deleted rows: {'deleted_articles', 'deleted_queries'}
         """
         logger.info(f"Cleaning up data older than {days} days")
-        self.db_manager.cleanup_old_data(days)
-    
-    def rebuild_vector_store(self, days: int = 7):
+        return self.db_manager.cleanup_old_data(days)
+
+    def clear_all_data(self) -> Dict[str, int]:
+        """
+        Remove all cached data (articles, summaries, embeddings metadata, query
+        cache) regardless of age, and clear the RAG vector store/conversation
+        history so nothing stale is left referencing deleted articles.
+
+        Returns:
+            Dictionary with counts of deleted rows.
+        """
+        logger.info("Clearing all cached data")
+        result = self.db_manager.clear_all_data()
+        if self.rag_engine:
+            self.rag_engine.clear_vector_store()
+        return result
+
+    def rebuild_vector_store(self, days: int = 7) -> Dict[str, Any]:
         """
         Rebuild vector store from existing articles.
-        
+
         Args:
             days: Include articles from last N days
+
+        Returns:
+            Dictionary: {'success': bool, 'error': str | None}
         """
         if not self.rag_engine:
             logger.warning("RAG is disabled. Cannot rebuild vector store.")
-            return False
-        
+            return {'success': False, 'error': 'RAG is disabled (RAG_ENABLED=false).'}
+
         logger.info(f"Rebuilding vector store with articles from last {days} days")
-        
+
         try:
             articles = self.db_manager.get_recent_articles(days=days)
-            
+
             if not articles:
                 logger.warning("No articles available for rebuilding vector store")
-                return False
-            
+                return {'success': False, 'error': 'No articles available. Fetch news first.'}
+
             self.rag_engine.build_vector_store(articles=articles, force_rebuild=True)
             logger.info(f"Vector store rebuilt with {len(articles)} articles")
-            return True
-        
+            return {'success': True, 'error': None}
+
         except Exception as e:
             logger.error(f"Failed to rebuild vector store: {e}")
-            return False
+            return {'success': False, 'error': str(e)}
 
 
 def main():
